@@ -1,0 +1,44 @@
+version: 0.2
+env:
+  variables:
+    # Definining CloudFormation Teamplate and Ruleset as variables - part of the code repo
+    CF_TEMPLATE: "src/cfn_template_file_example.yaml"
+    CF_ORG_RULESET:  "src/cfn_guard_ruleset_example"
+phases:
+  install:
+    commands:
+      - apt-get update
+      - apt-get install build-essential -y
+      - apt-get install cargo -y
+      - apt-get install git -y
+  pre_build:
+    commands:
+      - echo "Setting up the environment for AWS CloudFormation Guard"
+      - echo "More info https://github.com/aws-cloudformation/cloudformation-guard"
+      - echo "Install Rust"
+      - curl https://sh.rustup.rs -sSf | sh -s -- -y
+  build:
+    commands:
+       - echo "Pull GA release from github"
+       - echo "More info https://github.com/aws-cloudformation/cloudformation-guard/releases"
+       - wget https://github.com/aws-cloudformation/cloudformation-guard/releases/download/2.0.3/cfn-guard-v2-ubuntu-latest.tar.gz
+       - echo "Extract cfn-guard"
+       - tar xvf cfn-guard-v2-ubuntu-latest.tar.gz .
+       - echo "Validate CloudFormation template with cfn-guard tool"
+       - echo $CF_ORG_RULESET
+       - echo $CF_TEMPLATE
+       - echo "More information https://github.com/aws-cloudformation/cloudformation-guard/blob/master/cfn-guard/README.md"
+       - cfn-guard-v2-ubuntu-latest/cfn-guard validate -r $CF_ORG_RULESET -d $CF_TEMPLATE --show-summary none --type CFNTemplate -o yaml > raw_output.checks
+  post_build:
+    commands:
+        - METRIC_ID="${CODEBUILD_BUILD_ID}.json"
+        - python3 src/metricize.py raw_output.checks $(date +"%Y-%m-%d") # Produces metrics.json file as artifact.
+        - cp metrics.json ${METRIC_ID}
+artifacts:
+  files:
+    - $CF_TEMPLATE
+  secondary-artifacts:
+    MetricsArtifact:
+      files:
+        - $METRIC_ID
+  name: guard_templates
